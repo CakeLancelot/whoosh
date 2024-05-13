@@ -1,0 +1,4 @@
+unitypack @ git+https://github.com/dongresource/UnityPackFF.git
+Pillow
+fsb5
+lz4
