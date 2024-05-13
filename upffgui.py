@@ -88,14 +88,15 @@ def main():
     tree_view.bind("<<TreeviewSelect>>", lambda event: select_object(event, tree_view, right_frame))
 
     menu_bar = tk.Menu(root)
-    root.config(menu=menu_bar)
-
     file_menu = tk.Menu(menu_bar, tearoff=False)
     menu_bar.add_cascade(label="File", menu=file_menu)
-    file_menu.add_command(label="Open...", command=lambda: open_asset(root, tree_view))
+    file_menu.add_command(label="Open...", command=lambda: open_asset(root, tree_view), accelerator="Ctrl+O")
     file_menu.add_separator()
-    file_menu.add_command(label="Exit", command=root.quit)
+    file_menu.add_command(label="Exit", command=root.quit, accelerator="Ctrl+Q")
 
+    root.bind_all("<Control-q>", lambda event: root.quit())
+    root.bind_all("<Control-o>", lambda event: open_asset(root, tree_view))
+    root.config(menu=menu_bar)
     root.mainloop()
 
 if __name__ == "__main__":
