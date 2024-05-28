@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, scrolledtext, Canvas
+from tkinter import ttk, filedialog, scrolledtext
 from PIL import ImageTk, ImageOps
 import json
 import unitypack
@@ -7,6 +7,7 @@ from unitypack.asset import Asset
 
 current_file = None
 current_asset = None
+
 
 def open_asset(root, tree_view):
     global current_file
@@ -32,10 +33,11 @@ def open_asset(root, tree_view):
             name = obj.contents.name
         tree_view.insert("", "end", text=index, values=(index, name, obj.type))
 
+
 def select_object(event, tree_view, right_frame):
     global current_asset
     for child in right_frame.winfo_children():
-            child.destroy()
+        child.destroy()
 
     item = tree_view.item(tree_view.focus())
     if item['text'] == '':
@@ -43,19 +45,19 @@ def select_object(event, tree_view, right_frame):
     obj = current_asset.objects[item['text']]
 
     if (obj.class_id == 28):
-        canvas = Canvas(right_frame, width=obj.contents.width, height=obj.contents.height)
-        photo = ImageTk.PhotoImage(ImageOps.flip(obj.contents.image))
-        canvas.image = photo # keep reference so gc doesn't blank it out
+        canvas = tk.Canvas(right_frame, width=obj.contents.width, height=obj.contents.height)
+        canvas.image =  ImageTk.PhotoImage(ImageOps.flip(obj.contents.image))
         canvas.pack(fill=tk.BOTH)
-        imagesprite = canvas.create_image(obj.contents.width / 2, obj.contents.height / 2, image=canvas.image)
+        canvas.create_image(obj.contents.width / 2, obj.contents.height / 2, image=canvas.image)
     else:
-        text = tk.scrolledtext.ScrolledText(right_frame)
+        text = scrolledtext.ScrolledText(right_frame)
         if hasattr(obj.contents, "_obj"):
             text.insert(tk.END, json.dumps(obj.contents._obj, indent=4, default=str))
         else:
             text.insert(tk.END, json.dumps(obj.contents, indent=4, default=str))
         text.config(state=tk.DISABLED)
         text.pack(expand=True, fill=tk.BOTH)
+
 
 def main():
     root = tk.Tk()
@@ -98,6 +100,7 @@ def main():
     root.bind_all("<Control-o>", lambda event: open_asset(root, tree_view))
     root.config(menu=menu_bar)
     root.mainloop()
+
 
 if __name__ == "__main__":
     main()
