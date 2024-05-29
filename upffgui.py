@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, scrolledtext
 from PIL import ImageTk, ImageOps
 import json
+import os
 import unitypack
 from unitypack.asset import Asset
 
@@ -22,7 +23,7 @@ def open_asset(root, tree_view):
     else:
         current_asset = Asset.from_file(current_file)
 
-    root.title(f"{current_asset.name} - UnityPackFF GUI")
+    root.title(f"{os.path.basename(current_asset.name)} - UnityPackFF GUI")
     tree_view.delete(*tree_view.get_children())
 
     # TODO: pop up messagebox for missing assetrefs:
