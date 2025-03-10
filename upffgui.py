@@ -5,23 +5,30 @@ import json
 import os
 import unitypack
 from unitypack.asset import Asset
+from unitypack.environment import UnityEnvironment
 
 current_file = None
 current_asset = None
-
+current_env = None
 
 def open_asset(root, tree_view):
     global current_file
     global current_asset
+    global current_env
     filepath = filedialog.askopenfilename()
     if filepath == "":
         return
+
     current_file = open(filepath, 'rb')
+
     compressed_suffixes = ('.unity3d', '.resourceFile', '.assetbundle')
     if current_file.name.endswith(compressed_suffixes):
         current_asset = unitypack.load(current_file).assets[0]
     else:
-        current_asset = Asset.from_file(current_file)
+        if current_env is not None:
+            current_asset = Asset.from_file(current_file, UnityEnvironment(current_env))
+        else:
+            current_asset = Asset.from_file(current_file)
 
     root.title(f"{os.path.basename(current_asset.name)} - UnityPackFF GUI")
     tree_view.delete(*tree_view.get_children())
@@ -34,6 +41,9 @@ def open_asset(root, tree_view):
             name = obj.contents.name
         tree_view.insert("", "end", text=index, values=(index, name, obj.type))
 
+def set_env():
+    global current_env
+    current_env = filedialog.askdirectory()
 
 def select_object(event, tree_view, right_frame):
     global current_asset
@@ -94,6 +104,7 @@ def main():
     file_menu = tk.Menu(menu_bar, tearoff=False)
     menu_bar.add_cascade(label="File", menu=file_menu)
     file_menu.add_command(label="Open...", command=lambda: open_asset(root, tree_view), accelerator="Ctrl+O")
+    file_menu.add_command(label="Set UnityEnvironment...", command=lambda: set_env())
     file_menu.add_separator()
     file_menu.add_command(label="Exit", command=root.quit, accelerator="Ctrl+Q")
 
