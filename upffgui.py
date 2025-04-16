@@ -3,6 +3,7 @@ from tkinter import ttk, filedialog, scrolledtext
 from PIL import ImageTk, ImageOps
 import json
 import os
+import re
 import unitypack
 from unitypack.asset import Asset
 from unitypack.environment import UnityEnvironment
@@ -33,13 +34,29 @@ def open_asset(root, tree_view):
     root.title(f"{os.path.basename(current_asset.name)} - UnityPackFF GUI")
     tree_view.delete(*tree_view.get_children())
 
-    # TODO: pop up messagebox for missing assetrefs:
-    # KeyError: "No such asset: 'customassetbundle-b4f543c102ded400fbc6f1da25d9679a'"
+    ignored_assets = set()
     for index, obj in current_asset.objects.items():
-        name = ""
-        if hasattr(obj.contents, "name"):
-            name = obj.contents.name
-        tree_view.insert("", "end", text=index, values=(index, name, obj.type))
+        try:
+            name = ""
+            if hasattr(obj.contents, "name"):
+                name = obj.contents.name
+            tree_view.insert("", "end", text=index, values=(index, name, obj.type))
+        except KeyError as err:
+            if "No such asset:" in err.args[0]:
+                missing_asset = re.search(r"'([^']*)'", err.args[0]).group(1)
+                if missing_asset in ignored_assets:
+                    continue
+                else:
+                    ignored_assets.add(missing_asset)
+                message = (f"This asset depends on the file \"{missing_asset}\", but it was not found.\n\n"
+                           "You may need to copy the missing file into the same directory, "
+                           "or set your UnityEnvironment under the \"File\" menu.\n"
+                           "The file can still be read, but certain objects will be "
+                           "excluded from the list until the issue is corrected.")
+                tk.messagebox.showerror("Missing asset", message)
+            else:
+                raise
+
 
 def set_env():
     global current_env
