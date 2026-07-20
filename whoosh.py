@@ -1,11 +1,11 @@
+from widgets import AudioPlayerWidget, ObjectTextReprWidget, TextureViewWidget
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QTreeView, QFrame,
-    QFileDialog, QMessageBox, QTextEdit, QLabel, QHeaderView,
-    QMenuBar, QMenu, QAbstractItemView, QVBoxLayout, QScrollArea
+    QFileDialog, QMessageBox, QHeaderView,
+    QAbstractItemView, QVBoxLayout
 )
-from PySide6.QtCore import Qt, QStandardPaths, QByteArray
-from PySide6.QtGui import QAction, QStandardItemModel, QStandardItem, QKeySequence, QImage, QPixmap
-import json
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QAction, QStandardItemModel, QStandardItem, QKeySequence, QDesktopServices
 import os
 import re
 import unitypack
@@ -13,15 +13,6 @@ from unitypack.asset import Asset
 from unitypack.environment import UnityEnvironment
 
 import sys
-
-def PIL_to_qimage(pil_img):
-    temp = pil_img.convert('RGBA')
-    return QImage(
-        temp.tobytes('raw', "RGBA"),
-        temp.size[0],
-        temp.size[1],
-        QImage.Format.Format_RGBA8888
-    )
 
 class WhooshWindow(QMainWindow):
     def __init__(self):
@@ -47,7 +38,7 @@ class WhooshWindow(QMainWindow):
         open_action.triggered.connect(self.open_asset)
         file_menu.addAction(open_action)
 
-        set_env_action = QAction("Set Unity&Evironment...", self)
+        set_env_action = QAction("Set Unity&Environment...", self)
         set_env_action.triggered.connect(self.set_env)
         file_menu.addAction(set_env_action)
 
@@ -57,6 +48,23 @@ class WhooshWindow(QMainWindow):
         exit_action.setShortcut(QKeySequence.Quit)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
+
+        object_menu = menu_bar.addMenu("&Object")
+
+        export_action = QAction("Export...", self)
+        export_action.triggered.connect(self.export_object)
+        export_action.setEnabled(False)
+        object_menu.addAction(export_action)
+
+        help_menu = menu_bar.addMenu("&Help")
+
+        repo_action = QAction("GitHub Page", self)
+        repo_action.triggered.connect(self.open_repo)
+        help_menu.addAction(repo_action)
+
+        about_action = QAction("About...", self)
+        about_action.triggered.connect(self.about)
+        help_menu.addAction(about_action)
 
     def _setup_ui(self):
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -164,26 +172,22 @@ class WhooshWindow(QMainWindow):
         obj = self.current_asset.objects[int(index_str)]
 
         if obj.class_id == 28:
-            # Display image
-            from PIL import ImageOps
-            img = ImageOps.flip(obj.contents.image)
-            q_img = PIL_to_qimage(img)
-            pixmap = QPixmap.fromImage(q_img)
-            label = QLabel()
-            label.setPixmap(pixmap)
-            scroll_area = QScrollArea()
-            scroll_area.setWidget(label)
-            self.right_layout.addWidget(scroll_area)
+            self.right_layout.addWidget(TextureViewWidget(obj))
+        elif obj.class_id == 83:
+            self.right_layout.addWidget(AudioPlayerWidget(obj))
         else:
-            # Display JSON
-            text_edit = QTextEdit()
-            text_edit.setReadOnly(True)
-            if hasattr(obj.contents, "_obj"):
-                text_edit.setPlainText(json.dumps(obj.contents._obj, indent=4, default=str))
-            else:
-                text_edit.setPlainText(json.dumps(obj.contents, indent=4, default=str))
-            self.right_layout.addWidget(text_edit)
+            self.right_layout.addWidget(ObjectTextReprWidget(obj))
 
+    def export_object(self):
+        pass
+
+    def open_repo(self):
+        QDesktopServices.openUrl(QUrl("https://github.com/cakeLancelot/whoosh"))
+
+    def about(self):
+        QMessageBox.about(self, "About whoosh", "whoosh\n\n"
+                                                "The alpha asset viewer for Unity 2.x - 3.x files.\n"
+                                                "Built with PySide6 and UnityPackFF.\n\n")
 
 def main():
     app = QApplication(sys.argv)
