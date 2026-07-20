@@ -76,6 +76,7 @@ class WhooshWindow(QMainWindow):
         self.tree_view.header().setDefaultSectionSize(100)
         self.tree_view.header().resizeSection(0, 50)
         self.tree_view.header().resizeSection(1, 150)
+        #self.tree_view.setSortingEnabled(True)
 
         left_layout = QVBoxLayout(left_frame)
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -91,7 +92,7 @@ class WhooshWindow(QMainWindow):
 
         splitter.setSizes([300, 340])
 
-        self.tree_view.clicked.connect(self.select_object)
+        self.tree_view.selectionModel().selectionChanged.connect(self.select_object)
 
     def open_asset(self):
         filepath, _ = QFileDialog.getOpenFileName(self, "Open Asset File")
@@ -142,9 +143,11 @@ class WhooshWindow(QMainWindow):
     def set_env(self):
         self.current_env = QFileDialog.getExistingDirectory(self, "Select UnityEnvironment Directory")
 
-    def select_object(self, index):
-        if not index.isValid():
+    def select_object(self, selected, deselected):
+        indexes = selected.indexes()
+        if not indexes:
             return
+        index = indexes[0]
 
         # Clear right frame
         while self.right_layout.count():
