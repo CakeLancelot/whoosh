@@ -1,6 +1,8 @@
+from PIL import ImageOps
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QLabel, QScrollArea, QTextEdit, QVBoxLayout, QWidget, QPushButton, QSlider, QHBoxLayout
+from PySide6.QtWidgets import QLabel, QScrollArea, QTextEdit, QVBoxLayout, QWidget, QPushButton, QSlider, QHBoxLayout, \
+    QFileDialog
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from unitypack.object import ObjectInfo
@@ -9,17 +11,28 @@ import os
 import json
 import tempfile
 
+def _get_audio_format_name(value: int) -> str:
+    # The formats built into UPFF are too new
+    match value:
+        case 1: return "PCM8 Mono"
+        case 2: return "PCM8 Stereo"
+        case 3: return "PCM16 Mono"
+        case 4: return "PCM16 Stereo"
+        case 5: return "OGG Vorbis"
+        case _: return "Undocumented - please report"
+
+
 def _write_temp_audio(audio_data: bytes) -> str:
     """Write audio bytes to a temporary file and return the path."""
-    tmp = tempfile.NamedTemporaryFile(delete=False)
-    tmp.write(audio_data)
-    tmp.close()
-    return tmp.name
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        tmp.write(audio_data)
+        return tmp.name
 
 # TODO: Test if formats other than OGG work.
 class AudioPlayerWidget(QWidget):
     def __init__(self, obj: ObjectInfo, parent=None):
-        audio_bytes = obj.contents._obj.get("audio data", b"")
+        self.unity_object = obj
+        audio_bytes = obj.contents.audio_data
         super().__init__(parent)
 
         layout = QVBoxLayout(self)
@@ -33,7 +46,7 @@ class AudioPlayerWidget(QWidget):
         self.player.setSource(QUrl.fromLocalFile(temp_file))
 
         self.audio_info_label = QLabel(f"{obj.contents._obj.get('m_Name', 'Name unknown')}\n"
-                                       f"Format: {obj.contents._obj.get('m_Format', 'Unknown')}\n"
+                                       f"Format: {obj.contents._obj.get('m_Format', 'Unknown')} ({_get_audio_format_name(obj.contents._obj['m_Format'])})\n"
                                        f"Sample Rate: {obj.contents._obj.get('m_Frequency', 'Unknown')} Hz\n"
                                        f"Size: {obj.contents._obj.get('m_Size', 'Unknown')} bytes\n"
                                        f"Decompress on Load: {obj.contents._obj.get('m_DecompressOnLoad', 'Unknown')}")
@@ -106,10 +119,20 @@ class AudioPlayerWidget(QWidget):
             os.remove(source)
         super().closeEvent(event)
 
+    def export_object(self):
+        if self.unity_object.contents._obj['m_Format'] == 5:
+            file_filter = "OGG Vorbis File (*.ogg)"
+        else:
+            file_filter = "Raw PCM Audio (*.raw)"
+        filepath, _ = QFileDialog.getSaveFileName(self, "Save Exported Object", filter=file_filter)
+
+        with open(filepath, 'wb') as output:
+            output.write(self.unity_object.contents.audio_data)
 
 class ObjectTextReprWidget(QWidget):
     def __init__(self, obj: ObjectInfo, parent=None):
         super().__init__(parent)
+        self.unity_object = obj
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         text_edit = QTextEdit()
@@ -119,6 +142,11 @@ class ObjectTextReprWidget(QWidget):
         else:
             text_edit.setPlainText(json.dumps(obj.contents, indent=4, default=str))
         layout.addWidget(text_edit)
+
+    def export_object(self):
+        filepath, _ = QFileDialog.getSaveFileName(self, "Save Exported Object", filter="JSON File (*.json)")
+        with open(filepath, 'w') as output:
+            json.dump(self.unity_object.contents, output, indent=4, default=str)
 
 
 def PIL_to_qimage(pil_img):
@@ -134,6 +162,7 @@ def PIL_to_qimage(pil_img):
 class TextureViewWidget(QWidget):
     def __init__(self, obj: ObjectInfo, parent=None):
         super().__init__(parent)
+        self.unity_object = obj
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         from PIL import ImageOps
@@ -145,3 +174,14 @@ class TextureViewWidget(QWidget):
         scroll_area = QScrollArea()
         scroll_area.setWidget(label)
         layout.addWidget(scroll_area)
+
+    def export_object(self):
+        filepath, _ = QFileDialog.getSaveFileName(self, "Save Exported Object", filter="PNG Image (*.png)")
+        with open(filepath, 'wb') as output:
+            try:
+                image = self.unity_object.contents.image
+            except NotImplementedError:
+                print("Texture format not implemented. Could not export.")
+                return
+            image = ImageOps.flip(image)
+            image.save(output, format="png")

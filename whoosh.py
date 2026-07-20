@@ -21,6 +21,7 @@ class WhooshWindow(QMainWindow):
         self.current_file = None
         self.current_asset = None
         self.current_env = None
+        self.export_function = None
 
         self.setWindowTitle("whoosh")
         self.resize(640, 480)
@@ -51,10 +52,15 @@ class WhooshWindow(QMainWindow):
 
         object_menu = menu_bar.addMenu("&Object")
 
-        export_action = QAction("Export...", self)
-        export_action.triggered.connect(self.export_object)
-        export_action.setEnabled(False)
-        object_menu.addAction(export_action)
+        self.replace_action = QAction("Replace...", self)
+        self.replace_action.triggered.connect(self.export_object)
+        self.replace_action.setEnabled(False)
+        object_menu.addAction(self.replace_action)
+
+        self.export_action = QAction("Export...", self)
+        self.export_action.triggered.connect(self.export_object)
+        self.export_action.setEnabled(False)
+        object_menu.addAction(self.export_action)
 
         help_menu = menu_bar.addMenu("&Help")
 
@@ -62,7 +68,7 @@ class WhooshWindow(QMainWindow):
         repo_action.triggered.connect(self.open_repo)
         help_menu.addAction(repo_action)
 
-        about_action = QAction("About...", self)
+        about_action = QAction("About", self)
         about_action.triggered.connect(self.about)
         help_menu.addAction(about_action)
 
@@ -172,14 +178,23 @@ class WhooshWindow(QMainWindow):
         obj = self.current_asset.objects[int(index_str)]
 
         if obj.class_id == 28:
-            self.right_layout.addWidget(TextureViewWidget(obj))
+            widget_to_add = TextureViewWidget(obj)
         elif obj.class_id == 83:
-            self.right_layout.addWidget(AudioPlayerWidget(obj))
+            widget_to_add = AudioPlayerWidget(obj)
         else:
-            self.right_layout.addWidget(ObjectTextReprWidget(obj))
+            widget_to_add = ObjectTextReprWidget(obj)
+
+        self.right_layout.addWidget(widget_to_add)
+
+        if hasattr(widget_to_add, "export_object") and callable(widget_to_add.export_object):
+            self.export_function = widget_to_add.export_object
+            self.export_action.setEnabled(True)
+        else:
+            self.export_action.setEnabled(False)
 
     def export_object(self):
-        pass
+        if self.export_function is not None:
+            self.export_function()
 
     def open_repo(self):
         QDesktopServices.openUrl(QUrl("https://github.com/cakeLancelot/whoosh"))
