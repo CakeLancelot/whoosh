@@ -29,6 +29,7 @@ class WhooshWindow(QMainWindow):
 
         self._setup_menu()
         self._setup_ui()
+        self._setup_drag_and_drop()
 
     def _setup_menu(self):
         menu_bar = self.menuBar()
@@ -109,11 +110,29 @@ class WhooshWindow(QMainWindow):
 
         self.tree_view.selectionModel().selectionChanged.connect(self.select_object)
 
+    def _setup_drag_and_drop(self):
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        urls = event.mimeData().urls()
+        if not urls:
+            return
+        filepath = urls[0].toLocalFile()
+        
+        if os.path.isfile(filepath):
+            self._load_asset_file(filepath)
+
     def open_asset(self):
         filepath, _ = QFileDialog.getOpenFileName(self, "Open Asset File")
         if not filepath:
             return
+        self._load_asset_file(filepath)
 
+    def _load_asset_file(self, filepath: str):
         self.current_file = open(filepath, 'rb')
 
         compressed_suffixes = ('.unity3d', '.resourceFile', '.assetbundle')
@@ -130,30 +149,33 @@ class WhooshWindow(QMainWindow):
         self.tree_model.removeRows(0, self.tree_model.rowCount())
 
         ignored_assets = set()
-        for index, obj in self.current_asset.objects.items():
-            try:
-                name = ""
-                if hasattr(obj.contents, "name"):
-                    name = obj.contents.name
-                index_item = QStandardItem(str(index))
-                name_item = QStandardItem(str(name))
-                type_item = QStandardItem(str(obj.type))
-                self.tree_model.appendRow([index_item, name_item, type_item])
-            except KeyError as err:
-                if "No such asset:" in err.args[0]:
-                    missing_asset = re.search(r"'([^']*)'", err.args[0]).group(1)
-                    if missing_asset in ignored_assets:
-                        continue
+        try:
+            for index, obj in self.current_asset.objects.items():
+                try:
+                    name = ""
+                    if hasattr(obj.contents, "name"):
+                        name = obj.contents.name
+                    index_item = QStandardItem(str(index))
+                    name_item = QStandardItem(str(name))
+                    type_item = QStandardItem(str(obj.type))
+                    self.tree_model.appendRow([index_item, name_item, type_item])
+                except KeyError as err:
+                    if "No such asset:" in err.args[0]:
+                        missing_asset = re.search(r"'([^']*)'", err.args[0]).group(1)
+                        if missing_asset in ignored_assets:
+                            continue
+                        else:
+                            ignored_assets.add(missing_asset)
+                        message = (f"This asset depends on the file \"{missing_asset}\", but it was not found.\n\n"
+                                "You may need to copy the missing file into the same directory, "
+                                "or set your UnityEnvironment under the \"File\" menu.\n"
+                                "The file can still be read, but certain objects will be "
+                                "excluded from the list until the issue is corrected.")
+                        QMessageBox.critical(self, "Missing asset", message)
                     else:
-                        ignored_assets.add(missing_asset)
-                    message = (f"This asset depends on the file \"{missing_asset}\", but it was not found.\n\n"
-                               "You may need to copy the missing file into the same directory, "
-                               "or set your UnityEnvironment under the \"File\" menu.\n"
-                               "The file can still be read, but certain objects will be "
-                               "excluded from the list until the issue is corrected.")
-                    QMessageBox.critical(self, "Missing asset", message)
-                else:
-                    raise
+                        QMessageBox.critical(self, "Error", f"Failed to load the specified asset file\n\n{str(err)[:500]}")
+        except Exception as err:
+            QMessageBox.critical(self, "Error", f"Failed to load the specified asset file\n\n{str(err)[:500]}")
 
     def set_env(self):
         self.current_env = QFileDialog.getExistingDirectory(self, "Select UnityEnvironment Directory")
