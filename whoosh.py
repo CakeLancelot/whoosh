@@ -5,13 +5,14 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QVBoxLayout
 )
 from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QAction, QStandardItemModel, QStandardItem, QKeySequence, QDesktopServices
+from PySide6.QtGui import QAction, QStandardItemModel, QStandardItem, QKeySequence, QDesktopServices, QIcon
 import os
 import re
 import unitypack
 from unitypack.asset import Asset
 from unitypack.environment import UnityEnvironment
 
+import signal
 import sys
 
 class WhooshWindow(QMainWindow):
@@ -200,12 +201,14 @@ class WhooshWindow(QMainWindow):
         QDesktopServices.openUrl(QUrl("https://github.com/cakeLancelot/whoosh"))
 
     def about(self):
-        QMessageBox.about(self, "About whoosh", "whoosh\n\n"
+        QMessageBox.about(self, "About whoosh", "whoosh v0.1\n\n"
                                                 "The alpha asset viewer for Unity 2.x - 3.x files.\n"
                                                 "Built with PySide6 and UnityPackFF.\n\n")
 
 def main():
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
     app = QApplication(sys.argv)
+    app.setWindowIcon(QIcon('res/WhooshIcon.ico'))
     window = WhooshWindow()
     window.show()
     sys.exit(app.exec())
