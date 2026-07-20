@@ -208,6 +208,7 @@ class WhooshWindow(QMainWindow):
 def main():
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     app = QApplication(sys.argv)
+    # TODO: doesn't work when bundled into PyInstaller
     app.setWindowIcon(QIcon('res/WhooshIcon.ico'))
     window = WhooshWindow()
     window.show()

@@ -17,7 +17,7 @@ added_files = [
     (find_file('classes.json'), 'unitypack'),
     (find_file('strings.dat'), 'unitypack'),
     (find_file('structs.dat'), 'unitypack'),
-    ('res/WhooshIcon.ico', './res/WhooshIcon.ico')
+    ('./res/WhooshIcon.ico', './res/WhooshIcon.ico')
 ]
 
 a = Analysis(

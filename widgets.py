@@ -125,6 +125,8 @@ class AudioPlayerWidget(QWidget):
         else:
             file_filter = "Raw PCM Audio (*.raw)"
         filepath, _ = QFileDialog.getSaveFileName(self, "Save Exported Object", filter=file_filter)
+        if filepath is None or filepath == '':
+            return
 
         with open(filepath, 'wb') as output:
             output.write(self.unity_object.contents.audio_data)
@@ -145,6 +147,8 @@ class ObjectTextReprWidget(QWidget):
 
     def export_object(self):
         filepath, _ = QFileDialog.getSaveFileName(self, "Save Exported Object", filter="JSON File (*.json)")
+        if filepath is None or filepath == '':
+            return
         with open(filepath, 'w') as output:
             json.dump(self.unity_object.contents, output, indent=4, default=str)
 
@@ -177,6 +181,9 @@ class TextureViewWidget(QWidget):
 
     def export_object(self):
         filepath, _ = QFileDialog.getSaveFileName(self, "Save Exported Object", filter="PNG Image (*.png)")
+        if filepath is None or filepath == '':
+            return
+
         with open(filepath, 'wb') as output:
             try:
                 image = self.unity_object.contents.image
