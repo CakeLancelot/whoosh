@@ -1,4 +1,5 @@
 unitypack @ git+https://github.com/dongresource/UnityPackFF.git
+PySide6
 Pillow
 fsb5
 lz4

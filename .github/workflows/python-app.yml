@@ -27,7 +27,7 @@ jobs:
         pip install -r requirements.txt
     - name: Build Windows executable
       run: |
-        pyinstaller upffgui.spec
+        pyinstaller whoosh.spec
     - name: Upload Artifacts
       uses: actions/upload-artifact@master
       with:

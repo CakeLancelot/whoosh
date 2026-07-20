@@ -20,7 +20,7 @@ added_files = [
 ]
 
 a = Analysis(
-    ['upffgui.py'],
+    ['whoosh.py'],
     pathex=[],
     binaries=[],
     datas=added_files,
@@ -40,7 +40,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='upffgui',
+    name='whoosh',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
