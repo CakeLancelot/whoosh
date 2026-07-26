@@ -2,7 +2,7 @@ from widgets import AudioPlayerWidget, GenericObjectView, TextureViewWidget
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QTreeView, QFrame,
     QFileDialog, QMessageBox, QHeaderView,
-    QAbstractItemView, QVBoxLayout, QLineEdit, QTextEdit
+    QAbstractItemView, QVBoxLayout, QLineEdit, QTextEdit, QStyleFactory
 )
 from PySide6.QtCore import Qt, QUrl, QSortFilterProxyModel
 from PySide6.QtGui import QAction, QStandardItemModel, QStandardItem, QKeySequence, QDesktopServices, QIcon
@@ -81,6 +81,13 @@ class WhooshWindow(QMainWindow):
         exit_action.setShortcut(QKeySequence.Quit)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
+
+        view_menu = menu_bar.addMenu("&View")
+        style_section = view_menu.addMenu("Styles")
+        for style in QStyleFactory.keys():
+            style_action = QAction(style, self)
+            style_action.triggered.connect(lambda checked, s=style: QApplication.setStyle(s))
+            style_section.addAction(style_action)
 
         asset_menu = menu_bar.addMenu("&Asset")
 
