@@ -15,6 +15,11 @@ from unitypack.environment import UnityEnvironment
 import signal
 import sys
 
+def extract_shader_name(script: str) -> str:
+    try:
+        return re.findall('"([^"]*)"', script)[0]
+    except IndexError:
+        return ""
 
 def resource_path(relative_path: str) -> str:
     """Get absolute path to resource, works for dev and for PyInstaller"""
@@ -175,8 +180,14 @@ class WhooshWindow(QMainWindow):
             for index, obj in self.current_asset.objects.items():
                 try:
                     name = ""
-                    if hasattr(obj.contents, "name"):
+                    if hasattr(obj.contents, "name") and obj.contents.name not in (None, ""):
                         name = obj.contents.name
+                    elif obj.class_id == 48 and hasattr(obj.contents, "script"):
+                        name = extract_shader_name(obj.contents.script)
+                    elif hasattr(obj.contents, "_obj") and "m_Name" in obj.contents._obj.keys():
+                        name = obj.contents._obj["m_Name"]
+                    elif hasattr(obj.contents, "keys") and "m_Name" in obj.contents.keys():
+                        name = obj.contents["m_Name"]
                     index_item = QStandardItem(str(index))
                     name_item = QStandardItem(str(name))
                     type_item = QStandardItem(str(obj.type))
