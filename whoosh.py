@@ -2,9 +2,9 @@ from widgets import AudioPlayerWidget, ObjectTextReprWidget, TextureViewWidget
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QTreeView, QFrame,
     QFileDialog, QMessageBox, QHeaderView,
-    QAbstractItemView, QVBoxLayout
+    QAbstractItemView, QVBoxLayout, QLineEdit
 )
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, QSortFilterProxyModel
 from PySide6.QtGui import QAction, QStandardItemModel, QStandardItem, QKeySequence, QDesktopServices, QIcon
 import os
 import re
@@ -96,7 +96,13 @@ class WhooshWindow(QMainWindow):
 
         self.tree_model = QStandardItemModel(0, 3)
         self.tree_model.setHorizontalHeaderLabels(["Index", "Name", "Type"])
-        self.tree_view.setModel(self.tree_model)
+
+        # Proxy model for filtering by name
+        self.proxy_model = QSortFilterProxyModel()
+        self.proxy_model.setSourceModel(self.tree_model)
+        self.proxy_model.setFilterCaseSensitivity(Qt.CaseInsensitive)
+        self.proxy_model.setFilterKeyColumn(1)  # Filter by Name column
+        self.tree_view.setModel(self.proxy_model)
 
         self.tree_view.header().setSectionResizeMode(QHeaderView.Interactive)
         self.tree_view.header().setDefaultSectionSize(100)
@@ -104,8 +110,14 @@ class WhooshWindow(QMainWindow):
         self.tree_view.header().resizeSection(1, 150)
         #self.tree_view.setSortingEnabled(True)
 
+        # Search line edit
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Search by name...")
+        self.search_edit.textChanged.connect(self.proxy_model.setFilterFixedString)
+
         left_layout = QVBoxLayout(left_frame)
         left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.addWidget(self.search_edit)
         left_layout.addWidget(self.tree_view)
 
         # Right frame for details
@@ -155,8 +167,8 @@ class WhooshWindow(QMainWindow):
                 self.current_asset = Asset.from_file(self.current_file)
 
         self.setWindowTitle(f"{os.path.basename(self.current_asset.name)} - whoosh")
-
         self.tree_model.removeRows(0, self.tree_model.rowCount())
+        self.search_edit.clear()
 
         ignored_assets = set()
         try:
@@ -202,8 +214,9 @@ class WhooshWindow(QMainWindow):
             if child.widget():
                 child.widget().deleteLater()
 
-        row = index.row()
-        index_str = self.tree_model.item(row, 0).text()
+        # Map proxy index back to source model index
+        source_index = self.proxy_model.mapToSource(index)
+        index_str = self.tree_model.item(source_index.row(), 0).text()
 
         if not index_str:
             return
