@@ -2,7 +2,7 @@ from widgets import AudioPlayerWidget, ObjectTextReprWidget, TextureViewWidget
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QTreeView, QFrame,
     QFileDialog, QMessageBox, QHeaderView,
-    QAbstractItemView, QVBoxLayout, QLineEdit
+    QAbstractItemView, QVBoxLayout, QLineEdit, QTextEdit
 )
 from PySide6.QtCore import Qt, QUrl, QSortFilterProxyModel
 from PySide6.QtGui import QAction, QStandardItemModel, QStandardItem, QKeySequence, QDesktopServices, QIcon
@@ -40,7 +40,7 @@ class WhooshWindow(QMainWindow):
         self.export_function = None
 
         self.setWindowTitle("whoosh")
-        self.resize(640, 480)
+        self.resize(800, 600)
 
         self._setup_menu()
         self._setup_ui()
@@ -56,6 +56,20 @@ class WhooshWindow(QMainWindow):
         open_action.triggered.connect(self.open_asset)
         file_menu.addAction(open_action)
 
+        self.save_action = QAction("&Save", self)
+        self.save_action.setShortcut(QKeySequence.Save)
+        self.save_action.triggered.connect(self.save_asset)
+        self.save_action.setEnabled(False)
+        file_menu.addAction(self.save_action)
+
+        self.save_as_action = QAction("&Save as...", self)
+        self.save_as_action.setShortcut(QKeySequence.SaveAs)
+        self.save_as_action.triggered.connect(self.save_asset_as)
+        self.save_as_action.setEnabled(False)
+        file_menu.addAction(self.save_as_action)
+
+        file_menu.addSeparator()
+
         set_env_action = QAction("Set Unity&Environment...", self)
         set_env_action.triggered.connect(self.set_env)
         file_menu.addAction(set_env_action)
@@ -66,6 +80,18 @@ class WhooshWindow(QMainWindow):
         exit_action.setShortcut(QKeySequence.Quit)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
+
+        asset_menu = menu_bar.addMenu("&Asset")
+
+        self.properties_action = QAction("&Properties", self)
+        self.properties_action.triggered.connect(self.show_asset_properties)
+        self.properties_action.setEnabled(False)
+        asset_menu.addAction(self.properties_action)
+
+        self.references_action = QAction("&References", self)
+        self.references_action.triggered.connect(self.show_asset_references)
+        self.references_action.setEnabled(False)
+        asset_menu.addAction(self.references_action)
 
         object_menu = menu_bar.addMenu("&Object")
 
@@ -111,8 +137,8 @@ class WhooshWindow(QMainWindow):
 
         self.tree_view.header().setSectionResizeMode(QHeaderView.Interactive)
         self.tree_view.header().setDefaultSectionSize(100)
-        self.tree_view.header().resizeSection(0, 50)
-        self.tree_view.header().resizeSection(1, 150)
+        self.tree_view.header().resizeSection(0, 65)
+        self.tree_view.header().resizeSection(1, 175)
         #self.tree_view.setSortingEnabled(True)
 
         # Search line edit
@@ -159,6 +185,33 @@ class WhooshWindow(QMainWindow):
             return
         self._load_asset_file(filepath)
 
+    def save_asset(self):
+        pass
+
+    def save_asset_as(self):
+        pass
+
+    def show_asset_properties(self):
+        if self.current_asset is None:
+            return
+
+        properties = {
+            "Name": self.current_asset.name,
+            "Types": "\n".join(f"{type_id}: {obj}" for type_id, obj in self.current_asset.types.items()),
+            "Long object IDs": self.current_asset.long_object_ids,
+            "Objects Count": len(self.current_asset.objects),
+        }
+
+        properties_str = "\n\n".join(f"{key}: {value}" for key, value in properties.items())
+        self.display_in_right_frame(properties_str)
+
+    def show_asset_references(self):
+        if self.current_asset is None:
+            return
+
+        references_str = "\n".join(f"{i}: {str(ref)}" for i, ref in enumerate(self.current_asset.asset_refs))
+        self.display_in_right_frame(references_str)
+
     def _load_asset_file(self, filepath: str):
         self.current_file = open(filepath, 'rb')
 
@@ -171,7 +224,6 @@ class WhooshWindow(QMainWindow):
             else:
                 self.current_asset = Asset.from_file(self.current_file)
 
-        self.setWindowTitle(f"{os.path.basename(self.current_asset.name)} - whoosh")
         self.tree_model.removeRows(0, self.tree_model.rowCount())
         self.search_edit.clear()
 
@@ -210,10 +262,14 @@ class WhooshWindow(QMainWindow):
         except Exception as err:
             QMessageBox.critical(self, "Error", f"Failed to load the specified asset file\n\n{str(err)[:500]}")
 
+        self.setWindowTitle(f"{os.path.basename(self.current_asset.name)} - whoosh")
+        self.properties_action.setEnabled(True)
+        self.references_action.setEnabled(True)
+
     def set_env(self):
         self.current_env = QFileDialog.getExistingDirectory(self, "Select UnityEnvironment Directory")
 
-    def select_object(self, selected, deselected):
+    def select_object(self, selected, _):
         indexes = selected.indexes()
         if not indexes:
             return
@@ -249,6 +305,24 @@ class WhooshWindow(QMainWindow):
         else:
             self.export_action.setEnabled(False)
 
+    def display_in_right_frame(self, string: str):
+        # Deselect current object in the tree view
+        self.tree_view.clearSelection()
+
+        self.export_action.setEnabled(False)
+        self.replace_action.setEnabled(False)
+
+        # Clear right frame
+        while self.right_layout.count():
+            child = self.right_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        text_edit = QTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setPlainText(string)
+        self.right_layout.addWidget(text_edit)
+
     def export_object(self):
         if self.export_function is not None:
             self.export_function()
@@ -266,6 +340,14 @@ def main():
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(resource_path('WhooshIcon.ico')))
     window = WhooshWindow()
+
+    if len(sys.argv) > 1:
+        filepath = sys.argv[1]
+        if os.path.isfile(filepath):
+            window._load_asset_file(filepath)
+        else:
+            QMessageBox.critical(window, "Error", f"File not found: {filepath}")
+
     window.show()
     sys.exit(app.exec())
 
