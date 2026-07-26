@@ -15,6 +15,16 @@ from unitypack.environment import UnityEnvironment
 import signal
 import sys
 
+
+def resource_path(relative_path: str) -> str:
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath("./res")
+    return os.path.join(base_path, relative_path)
+
 class WhooshWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -230,8 +240,7 @@ class WhooshWindow(QMainWindow):
 def main():
     signal.signal(signal.SIGINT, signal.SIG_DFL)
     app = QApplication(sys.argv)
-    # TODO: doesn't work when bundled into PyInstaller
-    app.setWindowIcon(QIcon('res/WhooshIcon.ico'))
+    app.setWindowIcon(QIcon(resource_path('WhooshIcon.ico')))
     window = WhooshWindow()
     window.show()
     sys.exit(app.exec())
