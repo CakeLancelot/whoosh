@@ -35,24 +35,23 @@ def _write_temp_audio(audio_data: bytes) -> str:
 class AudioPlayerWidget(QWidget):
     def __init__(self, obj: ObjectInfo, parent=None):
         self.unity_object = obj
-        audio_bytes = obj.contents.audio_data
         super().__init__(parent)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        temp_file = _write_temp_audio(audio_bytes)
+        temp_file = _write_temp_audio(self.unity_object.contents.audio_data)
 
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
         self.player.setAudioOutput(self.audio_output)
         self.player.setSource(QUrl.fromLocalFile(temp_file))
 
-        self.audio_info_label = QLabel(f"{obj.contents._obj.get('m_Name', 'Name unknown')}\n"
-                                       f"Format: {obj.contents._obj.get('m_Format', 'Unknown')} ({_get_audio_format_name(obj.contents._obj['m_Format'])})\n"
-                                       f"Sample Rate: {obj.contents._obj.get('m_Frequency', 'Unknown')} Hz\n"
-                                       f"Size: {obj.contents._obj.get('m_Size', 'Unknown')} bytes\n"
-                                       f"Decompress on Load: {obj.contents._obj.get('m_DecompressOnLoad', 'Unknown')}")
+        self.audio_info_label = QLabel(f"{self.unity_object.contents._obj.get('m_Name', 'Name unknown')}\n"
+                                       f"Format: {self.unity_object.contents._obj.get('m_Format', 'Unknown')} ({_get_audio_format_name(self.unity_object.contents._obj['m_Format'])})\n"
+                                       f"Sample Rate: {self.unity_object.contents._obj.get('m_Frequency', 'Unknown')} Hz\n"
+                                       f"Size: {self.unity_object.contents._obj.get('m_Size', 'Unknown')} bytes\n"
+                                       f"Decompress on Load: {self.unity_object.contents._obj.get('m_DecompressOnLoad', 'Unknown')}")
 
         # Progress slider
         self.slider = QSlider(Qt.Orientation.Horizontal)
@@ -120,6 +119,7 @@ class AudioPlayerWidget(QWidget):
         source = self.player.source().toLocalFile()
         if source and os.path.exists(source):
             os.remove(source)
+        self.unity_object = None
         super().closeEvent(event)
 
     def export_object(self) -> bool:
@@ -148,6 +148,10 @@ class ObjectTextReprWidget(QWidget):
         else:
             text_edit.setPlainText(json.dumps(obj.contents, indent=4, default=str))
         layout.addWidget(text_edit)
+
+    def closeEvent(self, event):
+            self.unity_object = None
+            super().closeEvent(event)
 
 class ObjectDictTreeWidget(QWidget):
     """Displays the object's dictionary as a collapsible tree view."""
@@ -178,6 +182,10 @@ class ObjectDictTreeWidget(QWidget):
         #self.tree_view.expandAll()
 
         layout.addWidget(self.tree_view)
+
+    def closeEvent(self, event):
+        self.unity_object = None
+        super().closeEvent(event)
 
     @staticmethod
     def _populate_model(model: QStandardItemModel, data, parent: QStandardItem | None = None):
@@ -254,14 +262,9 @@ class GenericObjectView(QWidget):
         self.toolbar.addAction(self.action_tree)
         self.toolbar.addAction(self.action_text)
 
-        # Stack to hold the view widgets
-        self.text_widget = ObjectTextReprWidget(obj)
-        self.tree_widget = ObjectDictTreeWidget(obj)
-
         self.current_widget = None
 
         layout.addWidget(self.toolbar)
-        layout.addWidget(self.tree_widget)
 
         # Default to tree view
         self._show_tree_view()
@@ -279,12 +282,12 @@ class GenericObjectView(QWidget):
         new_widget.show()
 
     def _show_text_view(self):
-        self._switch_widget(self.text_widget)
+        self._switch_widget(ObjectTextReprWidget(self.unity_object))
         self.action_text.setEnabled(False)
         self.action_tree.setEnabled(True)
 
     def _show_tree_view(self):
-        self._switch_widget(self.tree_widget)
+        self._switch_widget(ObjectDictTreeWidget(self.unity_object))
         self.action_text.setEnabled(True)
         self.action_tree.setEnabled(False)
 
@@ -300,6 +303,10 @@ class GenericObjectView(QWidget):
             else:
                 json.dump(self.unity_object.contents, output, indent=4, default=str)
         return True
+
+    def closeEvent(self, event):
+        self.unity_object = None
+        super().closeEvent(event)
 
 def PIL_to_qimage(pil_img):
     temp = pil_img.convert('RGBA')
@@ -342,6 +349,10 @@ class TextureViewWidget(QWidget):
         scroll_area = QScrollArea()
         scroll_area.setWidget(label)
         layout.addWidget(scroll_area)
+
+    def closeEvent(self, event):
+        self.unity_object = None
+        super().closeEvent(event)
 
     def export_object(self) -> bool:
         filepath, _ = QFileDialog.getSaveFileName(self, "Save Exported Object", filter="PNG Image (*.png)")

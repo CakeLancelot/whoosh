@@ -237,14 +237,14 @@ class WhooshWindow(QMainWindow):
             for index, obj in self.current_asset.objects.items():
                 try:
                     name = ""
-                    if hasattr(obj.contents, "name") and obj.contents.name not in (None, ""):
-                        name = obj.contents.name
-                    elif obj.class_id == 48 and hasattr(obj.contents, "script"):
-                        name = extract_shader_name(obj.contents.script)
-                    elif hasattr(obj.contents, "_obj") and "m_Name" in obj.contents._obj.keys():
-                        name = obj.contents._obj["m_Name"]
-                    elif hasattr(obj.contents, "keys") and "m_Name" in obj.contents.keys():
-                        name = obj.contents["m_Name"]
+                    if hasattr(obj._read(), "name") and obj._read().name not in (None, ""):
+                        name = obj._read().name
+                    elif obj.class_id == 48 and hasattr(obj._read(), "script"):
+                        name = extract_shader_name(obj._read().script)
+                    elif hasattr(obj._read(), "_obj") and "m_Name" in obj._read()._obj.keys():
+                        name = obj._read()._obj["m_Name"]
+                    elif hasattr(obj._read(), "keys") and "m_Name" in obj._read().keys():
+                        name = obj._read()["m_Name"]
                     index_item = QStandardItem(str(index))
                     name_item = QStandardItem(str(name))
                     type_item = QStandardItem(str(obj.type))
