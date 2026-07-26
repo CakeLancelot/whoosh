@@ -1,4 +1,4 @@
-from widgets import AudioPlayerWidget, ObjectTextReprWidget, TextureViewWidget
+from widgets import AudioPlayerWidget, GenericObjectView, TextureViewWidget
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QTreeView, QFrame,
     QFileDialog, QMessageBox, QHeaderView,
@@ -36,6 +36,7 @@ class WhooshWindow(QMainWindow):
 
         self.current_file = None
         self.current_asset = None
+        self.current_asset_dirty = False
         self.current_env = None
         self.export_function = None
 
@@ -96,7 +97,7 @@ class WhooshWindow(QMainWindow):
         object_menu = menu_bar.addMenu("&Object")
 
         self.replace_action = QAction("Replace...", self)
-        self.replace_action.triggered.connect(self.export_object)
+        self.replace_action.triggered.connect(self.replace_object)
         self.replace_action.setEnabled(False)
         object_menu.addAction(self.replace_action)
 
@@ -186,6 +187,8 @@ class WhooshWindow(QMainWindow):
         self._load_asset_file(filepath)
 
     def save_asset(self):
+        if self.current_asset is None or not self.current_asset_dirty:
+            return
         pass
 
     def save_asset_as(self):
@@ -213,6 +216,8 @@ class WhooshWindow(QMainWindow):
         self.display_in_right_frame(references_str)
 
     def _load_asset_file(self, filepath: str):
+        self.tree_view.clearSelection()
+        self.clear_right_frame()
         self.current_file = open(filepath, 'rb')
 
         compressed_suffixes = ('.unity3d', '.resourceFile', '.assetbundle')
@@ -275,11 +280,7 @@ class WhooshWindow(QMainWindow):
             return
         index = indexes[0]
 
-        # Clear right frame
-        while self.right_layout.count():
-            child = self.right_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
+        self.clear_right_frame()
 
         # Map proxy index back to source model index
         source_index = self.proxy_model.mapToSource(index)
@@ -295,7 +296,7 @@ class WhooshWindow(QMainWindow):
         elif obj.class_id == 83:
             widget_to_add = AudioPlayerWidget(obj)
         else:
-            widget_to_add = ObjectTextReprWidget(obj)
+            widget_to_add = GenericObjectView(obj)
 
         self.right_layout.addWidget(widget_to_add)
 
@@ -306,17 +307,12 @@ class WhooshWindow(QMainWindow):
             self.export_action.setEnabled(False)
 
     def display_in_right_frame(self, string: str):
-        # Deselect current object in the tree view
         self.tree_view.clearSelection()
 
         self.export_action.setEnabled(False)
         self.replace_action.setEnabled(False)
 
-        # Clear right frame
-        while self.right_layout.count():
-            child = self.right_layout.takeAt(0)
-            if child.widget():
-                child.widget().deleteLater()
+        self.clear_right_frame()
 
         text_edit = QTextEdit()
         text_edit.setReadOnly(True)
@@ -325,7 +321,16 @@ class WhooshWindow(QMainWindow):
 
     def export_object(self):
         if self.export_function is not None:
-            self.export_function()
+            result = self.export_function()
+
+    def replace_object(self):
+        pass
+
+    def clear_right_frame(self):
+        while self.right_layout.count():
+            child = self.right_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
 
     def open_repo(self):
         QDesktopServices.openUrl(QUrl("https://github.com/cakeLancelot/whoosh"))

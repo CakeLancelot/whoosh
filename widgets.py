@@ -1,8 +1,11 @@
 from PIL import ImageOps
-from PySide6.QtCore import Qt, QUrl
-from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QLabel, QScrollArea, QTextEdit, QVBoxLayout, QWidget, QPushButton, QSlider, QHBoxLayout, \
-    QFileDialog
+from PySide6.QtCore import Qt, QUrl, QSize
+from PySide6.QtGui import QImage, QPixmap, QPainter, QBrush, QColor
+from PySide6.QtWidgets import (
+    QLabel, QScrollArea, QTextEdit, QVBoxLayout, QWidget, QPushButton, QSlider, QHBoxLayout,
+    QFileDialog, QTreeView, QHeaderView, QToolBar,
+)
+from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from unitypack.object import ObjectInfo
@@ -119,17 +122,18 @@ class AudioPlayerWidget(QWidget):
             os.remove(source)
         super().closeEvent(event)
 
-    def export_object(self):
+    def export_object(self) -> bool:
         if self.unity_object.contents._obj['m_Format'] == 5:
             file_filter = "OGG Vorbis File (*.ogg)"
         else:
             file_filter = "Raw PCM Audio (*.raw)"
         filepath, _ = QFileDialog.getSaveFileName(self, "Save Exported Object", filter=file_filter)
         if filepath is None or filepath == '':
-            return
+            return False
 
         with open(filepath, 'wb') as output:
             output.write(self.unity_object.contents.audio_data)
+        return True
 
 class ObjectTextReprWidget(QWidget):
     def __init__(self, obj: ObjectInfo, parent=None):
@@ -145,13 +149,157 @@ class ObjectTextReprWidget(QWidget):
             text_edit.setPlainText(json.dumps(obj.contents, indent=4, default=str))
         layout.addWidget(text_edit)
 
-    def export_object(self):
-        filepath, _ = QFileDialog.getSaveFileName(self, "Save Exported Object", filter="JSON File (*.json)")
-        if filepath is None or filepath == '':
-            return
-        with open(filepath, 'w') as output:
-            json.dump(self.unity_object.contents, output, indent=4, default=str)
+class ObjectDictTreeWidget(QWidget):
+    """Displays the object's dictionary as a collapsible tree view."""
 
+    def __init__(self, obj: ObjectInfo, parent=None):
+        super().__init__(parent)
+        self.unity_object = obj
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.tree_view = QTreeView()
+        self.tree_view.setEditTriggers(QTreeView.EditTrigger.NoEditTriggers)
+        self.tree_view.setHeaderHidden(True)
+        self.tree_view.setIndentation(20)
+        self.tree_view.setUniformRowHeights(True)
+        self.tree_view.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+
+        model = QStandardItemModel()
+        model.setHorizontalHeaderLabels(["Key", "Value"])
+
+        if hasattr(obj.contents, "_obj"):
+            data = obj.contents._obj
+        else:
+            data = obj.contents
+
+        ObjectDictTreeWidget._populate_model(model, data)
+        self.tree_view.setModel(model)
+        #self.tree_view.expandAll()
+
+        layout.addWidget(self.tree_view)
+
+    @staticmethod
+    def _populate_model(model: QStandardItemModel, data, parent: QStandardItem | None = None):
+        """Recursively populate a QStandardItemModel from a dict/list structure."""
+        if isinstance(data, dict):
+            for key, value in data.items():
+                key_item = QStandardItem(str(key))
+                if isinstance(value, dict):
+                    val_item = QStandardItem("[nested dict]")
+                    ObjectDictTreeWidget._populate_model(model, value, key_item)
+                elif isinstance(value, list):
+                    val_item = QStandardItem(f"[list: {len(value)} items]")
+                    ObjectDictTreeWidget._populate_model(model, value, key_item)
+                else:
+                    val_item = QStandardItem(ObjectDictTreeWidget._format_value(value))
+                if parent is None:
+                    model.appendRow([key_item, val_item])
+                else:
+                    parent.appendRow([key_item, val_item])
+        elif isinstance(data, list):
+            for idx, value in enumerate(data):
+                key_item = QStandardItem(f"[{idx}]")
+                if isinstance(value, (dict, list)):
+                    val_item = QStandardItem(
+                        f"[nested {'dict' if isinstance(value, dict) else 'list'}]"
+                    )
+                    ObjectDictTreeWidget._populate_model(model, value, key_item)
+                else:
+                    val_item = QStandardItem(ObjectDictTreeWidget._format_value(value))
+                if parent is None:
+                    model.appendRow([key_item, val_item])
+                else:
+                    parent.appendRow([key_item, val_item])
+        else:
+            val_item = QStandardItem(ObjectDictTreeWidget._format_value(data))
+            if parent is None:
+                model.appendRow([QStandardItem("<root>"), val_item])
+            else:
+                parent.appendRow([QStandardItem("<root>"), val_item])
+
+    @staticmethod
+    def _format_value(value) -> str:
+        """Format a scalar value for display."""
+        if value is None:
+            return "<None>"
+        if isinstance(value, bool):
+            return str(value)
+        return str(value)
+
+class GenericObjectView(QWidget):
+    """A widget that displays an object with a toolbar to switch between Text and Tree views."""
+    
+    def __init__(self, obj: ObjectInfo, parent=None):
+        super().__init__(parent)
+        self.unity_object = obj
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # Toolbar for switching views
+        self.toolbar = QToolBar()
+        self.toolbar.setIconSize(QSize(16, 16))
+
+        self.action_tree = QAction("Tree", self)
+        self.action_tree.setToolTip("View as tree structure")
+        self.action_tree.triggered.connect(self._show_tree_view)
+
+        self.action_text = QAction("Text", self)
+        self.action_text.setToolTip("View as text representation")
+        self.action_text.triggered.connect(self._show_text_view)
+
+        self.toolbar.addWidget(QLabel("View as: "))
+        self.toolbar.addSeparator()
+        self.toolbar.addAction(self.action_tree)
+        self.toolbar.addAction(self.action_text)
+
+        # Stack to hold the view widgets
+        self.text_widget = ObjectTextReprWidget(obj)
+        self.tree_widget = ObjectDictTreeWidget(obj)
+
+        self.current_widget = None
+
+        layout.addWidget(self.toolbar)
+        layout.addWidget(self.tree_widget)
+
+        # Default to tree view
+        self._show_tree_view()
+
+    def _switch_widget(self, new_widget: QWidget):
+        if self.current_widget is not None:
+            # Remove the current widget from the layout
+            index = self.layout().indexOf(self.current_widget)
+            if index != -1:
+                self.layout().removeWidget(self.current_widget)
+                self.current_widget.hide()
+
+        self.current_widget = new_widget
+        self.layout().addWidget(new_widget)
+        new_widget.show()
+
+    def _show_text_view(self):
+        self._switch_widget(self.text_widget)
+        self.action_text.setEnabled(False)
+        self.action_tree.setEnabled(True)
+
+    def _show_tree_view(self):
+        self._switch_widget(self.tree_widget)
+        self.action_text.setEnabled(True)
+        self.action_tree.setEnabled(False)
+
+    def export_object(self) -> bool:
+        filepath, _ = QFileDialog.getSaveFileName(
+            self, "Save Exported Object", filter="JSON File (*.json)"
+        )
+        if filepath is None or filepath == "":
+            return False
+        with open(filepath, "w") as output:
+            if hasattr(self.unity_object.contents, "_obj"):
+                json.dump(self.unity_object.contents._obj, output, indent=4, default=str)
+            else:
+                json.dump(self.unity_object.contents, output, indent=4, default=str)
+        return True
 
 def PIL_to_qimage(pil_img):
     temp = pil_img.convert('RGBA')
@@ -162,6 +310,21 @@ def PIL_to_qimage(pil_img):
         QImage.Format.Format_RGBA8888
     )
 
+def create_checkerboard_pixmap(image_pixmap: QPixmap, tile_size: int = 10) -> QPixmap:
+    """Create a pixmap with a checkerboard background and the image composited on top."""
+    combined = QPixmap(image_pixmap.size())
+    painter = QPainter(combined)
+    white = QColor(255, 255, 255)
+    gray = QColor(192, 192, 192)
+    for y in range(0, combined.height(), tile_size):
+        for x in range(0, combined.width(), tile_size):
+            row = y // tile_size
+            col = x // tile_size
+            color = white if (row + col) % 2 == 0 else gray
+            painter.fillRect(x, y, tile_size, tile_size, QBrush(color))
+    painter.drawPixmap(0, 0, image_pixmap)
+    painter.end()
+    return combined
 
 class TextureViewWidget(QWidget):
     def __init__(self, obj: ObjectInfo, parent=None):
@@ -173,22 +336,24 @@ class TextureViewWidget(QWidget):
         img = ImageOps.flip(obj.contents.image)
         q_img = PIL_to_qimage(img)
         pixmap = QPixmap.fromImage(q_img)
+        checkerboard_pixmap = create_checkerboard_pixmap(pixmap)
         label = QLabel()
-        label.setPixmap(pixmap)
+        label.setPixmap(checkerboard_pixmap)
         scroll_area = QScrollArea()
         scroll_area.setWidget(label)
         layout.addWidget(scroll_area)
 
-    def export_object(self):
+    def export_object(self) -> bool:
         filepath, _ = QFileDialog.getSaveFileName(self, "Save Exported Object", filter="PNG Image (*.png)")
         if filepath is None or filepath == '':
-            return
+            return False
 
         with open(filepath, 'wb') as output:
             try:
                 image = self.unity_object.contents.image
             except NotImplementedError:
                 print("Texture format not implemented. Could not export.")
-                return
+                return False
             image = ImageOps.flip(image)
             image.save(output, format="png")
+        return True
