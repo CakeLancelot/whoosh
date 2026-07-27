@@ -41,7 +41,7 @@ class WhooshWindow(QMainWindow):
         self.export_function = None
         self.replace_function = None
 
-        self.setWindowTitle("whoosh")
+        self.update_window_title()
         self.resize(800, 600)
 
         self._setup_menu()
@@ -270,13 +270,13 @@ class WhooshWindow(QMainWindow):
                                 "or set your UnityEnvironment under the \"File\" menu.\n"
                                 "The file can still be read, but certain objects will be "
                                 "excluded from the list until the issue is corrected.")
-                        QMessageBox.critical(self, "Missing asset", message)
+                        QMessageBox.warning(self, "Missing asset", message)
                     else:
                         QMessageBox.critical(self, "Error", f"Failed to load the specified asset file\n\n{str(err)[:500]}")
         except Exception as err:
             QMessageBox.critical(self, "Error", f"Failed to load the specified asset file\n\n{str(err)[:500]}")
 
-        self.setWindowTitle(f"{os.path.basename(self.current_asset.name)} - whoosh")
+        self.set_asset_dirty(False)
         self.properties_action.setEnabled(True)
         self.references_action.setEnabled(True)
 
@@ -341,12 +341,30 @@ class WhooshWindow(QMainWindow):
     def replace_object(self):
         if self.replace_function is not None:
             result = self.replace_function()
+            if result:
+                self.set_asset_dirty(True)
 
     def clear_right_frame(self):
         while self.right_layout.count():
             child = self.right_layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
+
+    def update_window_title(self):
+        if self.current_asset is not None:
+            title = f"{os.path.basename(self.current_asset.name)}"
+            if self.current_asset_dirty:
+                title += "*"
+            title += " - whoosh"
+            self.setWindowTitle(title)
+        else:
+            self.setWindowTitle("whoosh")
+
+    def set_asset_dirty(self, dirty: bool):
+        self.current_asset_dirty = dirty
+        self.save_action.setEnabled(dirty)
+        self.save_as_action.setEnabled(dirty)
+        self.update_window_title()
 
     def open_repo(self):
         QDesktopServices.openUrl(QUrl("https://github.com/cakeLancelot/whoosh"))
