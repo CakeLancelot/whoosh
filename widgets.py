@@ -9,6 +9,7 @@ from PySide6.QtGui import QStandardItemModel, QStandardItem, QAction
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 from unitypack.object import ObjectInfo
+from unitypack.engine.texture import TextureFormat
 
 import os
 import json
@@ -349,6 +350,13 @@ class TextureViewWidget(QWidget):
         scroll_area = QScrollArea()
         scroll_area.setWidget(label)
         layout.addWidget(scroll_area)
+        status_bar = QLabel(
+            f"{obj.contents.width}x{obj.contents.height}px "
+            f"{TextureFormat(obj.contents.format).name} "
+            f"{obj.contents._obj['m_CompleteImageSize']} bytes"
+        )
+        status_bar.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(status_bar)
 
     def closeEvent(self, event):
         self.unity_object = None

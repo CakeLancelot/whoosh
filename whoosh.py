@@ -39,6 +39,7 @@ class WhooshWindow(QMainWindow):
         self.current_asset_dirty = False
         self.current_env = None
         self.export_function = None
+        self.replace_function = None
 
         self.setWindowTitle("whoosh")
         self.resize(800, 600)
@@ -244,14 +245,15 @@ class WhooshWindow(QMainWindow):
             for index, obj in self.current_asset.objects.items():
                 try:
                     name = ""
-                    if hasattr(obj._read(), "name") and obj._read().name not in (None, ""):
-                        name = obj._read().name
-                    elif obj.class_id == 48 and hasattr(obj._read(), "script"):
-                        name = extract_shader_name(obj._read().script)
-                    elif hasattr(obj._read(), "_obj") and "m_Name" in obj._read()._obj.keys():
-                        name = obj._read()._obj["m_Name"]
-                    elif hasattr(obj._read(), "keys") and "m_Name" in obj._read().keys():
-                        name = obj._read()["m_Name"]
+                    contents = obj._read()
+                    if hasattr(contents, "name") and contents.name not in (None, ""):
+                        name = contents.name
+                    elif obj.class_id == 48 and hasattr(contents, "script"):
+                        name = extract_shader_name(contents.script)
+                    elif hasattr(contents, "_obj") and "m_Name" in contents._obj.keys():
+                        name = contents._obj["m_Name"]
+                    elif hasattr(contents, "keys") and "m_Name" in contents.keys():
+                        name = contents["m_Name"]
                     index_item = QStandardItem(str(index))
                     name_item = QStandardItem(str(name))
                     type_item = QStandardItem(str(obj.type))
@@ -313,6 +315,12 @@ class WhooshWindow(QMainWindow):
         else:
             self.export_action.setEnabled(False)
 
+        if hasattr(widget_to_add, "replace_object") and callable(widget_to_add.replace_object):
+                    self.replace_function = widget_to_add.replace_object
+                    self.replace_action.setEnabled(True)
+        else:
+            self.replace_action.setEnabled(False)
+
     def display_in_right_frame(self, string: str):
         self.tree_view.clearSelection()
 
@@ -331,7 +339,8 @@ class WhooshWindow(QMainWindow):
             result = self.export_function()
 
     def replace_object(self):
-        pass
+        if self.replace_function is not None:
+            result = self.replace_function()
 
     def clear_right_frame(self):
         while self.right_layout.count():
