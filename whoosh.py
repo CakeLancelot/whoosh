@@ -2,9 +2,10 @@ from widgets import AudioPlayerWidget, GenericObjectView, TextureViewWidget
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QTreeView, QFrame,
     QFileDialog, QMessageBox, QHeaderView,
-    QAbstractItemView, QVBoxLayout, QLineEdit, QTextEdit, QStyleFactory
+    QAbstractItemView, QVBoxLayout, QLineEdit, QTextEdit,
+    QStyleFactory, QStatusBar
 )
-from PySide6.QtCore import Qt, QUrl, QSortFilterProxyModel
+from PySide6.QtCore import Qt, QUrl, QSortFilterProxyModel, QThread, Signal
 from PySide6.QtGui import QAction, QStandardItemModel, QStandardItem, QKeySequence, QDesktopServices, QIcon
 import os
 import re
@@ -29,6 +30,55 @@ def resource_path(relative_path: str) -> str:
     except AttributeError:
         base_path = os.path.abspath("./res")
     return os.path.join(base_path, relative_path)
+
+
+class AssetLoaderThread(QThread):
+    """Worker thread for building the tree model without blocking the UI."""
+    row_ready = Signal(str, str, str)
+    warning = Signal(str, str)
+    error = Signal(str, str)
+    finished_loading = Signal()
+
+    def __init__(self, asset):
+        super().__init__()
+        self.asset = asset
+
+    def run(self):
+        ignored_assets = set()
+        try:
+            for index, obj in self.asset.objects.items():
+                try:
+                    name = ""
+                    contents = obj._read()
+                    if hasattr(contents, "name") and contents.name not in (None, ""):
+                        name = contents.name
+                    elif obj.class_id == 48 and hasattr(contents, "script"):
+                        name = extract_shader_name(contents.script)
+                    elif hasattr(contents, "_obj") and "m_Name" in contents._obj.keys():
+                        name = contents._obj["m_Name"]
+                    elif hasattr(contents, "keys") and "m_Name" in contents.keys():
+                        name = contents["m_Name"]
+                    self.row_ready.emit(str(index), str(name), str(obj.type))
+                except KeyError as err:
+                    if "No such asset:" in err.args[0]:
+                        missing_asset = re.search(r"'([^']*)'", err.args[0]).group(1)
+                        if missing_asset in ignored_assets:
+                            continue
+                        else:
+                            ignored_assets.add(missing_asset)
+                        message = (f"This asset depends on the file \"{missing_asset}\", but it was not found.\n\n"
+                                  "You may need to copy the missing file into the same directory, "
+                                  "or set your UnityEnvironment under the \"File\" menu.\n"
+                                  "The file can still be read, but certain objects will be "
+                                  "excluded from the list until the issue is corrected.")
+                        self.warning.emit("Missing asset", message)
+                    else:
+                        self.error.emit("Error", f"Failed to load the specified asset (during object reading)\n\n{str(err)[:500]}")
+        except Exception as err:
+            self.error.emit("Error", f"Failed to load the specified asset file (during object enumeration)\n\n{str(err)[:500]}")
+        finally:
+            self.finished_loading.emit()
+
 
 class WhooshWindow(QMainWindow):
     def __init__(self):
@@ -171,6 +221,9 @@ class WhooshWindow(QMainWindow):
         splitter.setSizes([300, 340])
 
         self.tree_view.selectionModel().selectionChanged.connect(self.select_object)
+        self.status_bar = QStatusBar()
+        self.status_bar.showMessage("Ready.")
+        self.setStatusBar(self.status_bar)
 
     def _setup_drag_and_drop(self):
         self.setAcceptDrops(True)
@@ -233,8 +286,8 @@ class WhooshWindow(QMainWindow):
         # Cleanup previous state
         self.set_asset_dirty(False)
         self.tree_view.clearSelection()
-        self.clear_right_frame()
         self.tree_model.removeRows(0, self.tree_model.rowCount())
+        self.clear_right_frame()
         self.search_edit.clear()
 
         self.current_file = open(filepath, 'rb')
@@ -248,59 +301,35 @@ class WhooshWindow(QMainWindow):
             else:
                 self.current_asset = Asset.from_file(self.current_file)
 
-        # TODO: Do this on a separate thread
-        # Currently the messageboxes prevent this from working
-        completed_rows = self._build_tree_model(self.current_asset)
+        # Build tree model on a separate thread to keep UI responsive
+        self.loader_thread = AssetLoaderThread(self.current_asset)
+        self.loader_thread.row_ready.connect(self._on_row_ready)
+        self.loader_thread.warning.connect(self._on_warning)
+        self.loader_thread.error.connect(self._on_error)
+        self.loader_thread.finished_loading.connect(self._on_loading_finished)
+        self.loader_thread.start()
 
-        for index_item, name_item, type_item in completed_rows:
-            self.tree_model.appendRow([
-                QStandardItem(index_item),
-                QStandardItem(name_item),
-                QStandardItem(type_item)
-            ])
+    def _on_row_ready(self, index_item: str, name_item: str, type_item: str):
+        self.status_bar.showMessage(f"Processed object {index_item}...")
+        self.tree_model.appendRow([
+            QStandardItem(index_item),
+            QStandardItem(name_item),
+            QStandardItem(type_item)
+        ])
+
+    def _on_warning(self, title: str, message: str):
+        QMessageBox.warning(self, title, message)
+        self.app.processEvents()
+
+    def _on_error(self, title: str, message: str):
+        QMessageBox.critical(self, title, message)
+        self.app.processEvents()
+
+    def _on_loading_finished(self):
         self.properties_action.setEnabled(True)
         self.references_action.setEnabled(True)
+        self.status_bar.showMessage(f"Ready.")
         self.set_window_state(True)
-
-    def _build_tree_model(self, asset) -> list[tuple[str, str, str]]:
-        ignored_assets = set()
-        rows = []
-        try:
-            for index, obj in asset.objects.items():
-                try:
-                    name = ""
-                    contents = obj._read()
-                    if hasattr(contents, "name") and contents.name not in (None, ""):
-                        name = contents.name
-                    elif obj.class_id == 48 and hasattr(contents, "script"):
-                        name = extract_shader_name(contents.script)
-                    elif hasattr(contents, "_obj") and "m_Name" in contents._obj.keys():
-                        name = contents._obj["m_Name"]
-                    elif hasattr(contents, "keys") and "m_Name" in contents.keys():
-                        name = contents["m_Name"]
-                    index_item = str(index)
-                    name_item = str(name)
-                    type_item = str(obj.type)
-                    rows.append([index_item, name_item, type_item])
-                except KeyError as err:
-                    if "No such asset:" in err.args[0]:
-                        missing_asset = re.search(r"'([^']*)'", err.args[0]).group(1)
-                        if missing_asset in ignored_assets:
-                            continue
-                        else:
-                            ignored_assets.add(missing_asset)
-                        message = (f"This asset depends on the file \"{missing_asset}\", but it was not found.\n\n"
-                                "You may need to copy the missing file into the same directory, "
-                                "or set your UnityEnvironment under the \"File\" menu.\n"
-                                "The file can still be read, but certain objects will be "
-                                "excluded from the list until the issue is corrected.")
-                        QMessageBox.warning(self, "Missing asset", message)
-                    else:
-                        QMessageBox.critical(self, "Error", f"Failed to load the specified asset (during object reading)\n\n{str(err)[:500]}")
-        except Exception as err:
-            QMessageBox.critical(self, "Error", f"Failed to load the specified asset file (during object enumeration)\n\n{str(err)[:500]}")
-        finally:
-            return rows
 
     def set_env(self):
         self.current_env = QFileDialog.getExistingDirectory(self, "Select UnityEnvironment Directory")
