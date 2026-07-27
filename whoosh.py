@@ -228,13 +228,14 @@ class WhooshWindow(QMainWindow):
         self.display_in_right_frame(references_str)
 
     def _load_asset_file(self, filepath: str):
-        self.setEnabled(False) # Disable interaction while loading
-        self.app.processEvents() # Update the UI to reflect disabled state
+        self.set_window_state(False) # Disable interaction while loading
 
         # Cleanup previous state
         self.set_asset_dirty(False)
         self.tree_view.clearSelection()
         self.clear_right_frame()
+        self.tree_model.removeRows(0, self.tree_model.rowCount())
+        self.search_edit.clear()
 
         self.current_file = open(filepath, 'rb')
 
@@ -247,12 +248,25 @@ class WhooshWindow(QMainWindow):
             else:
                 self.current_asset = Asset.from_file(self.current_file)
 
-        self.tree_model.removeRows(0, self.tree_model.rowCount())
-        self.search_edit.clear()
+        # TODO: Do this on a separate thread
+        # Currently the messageboxes prevent this from working
+        completed_rows = self._build_tree_model(self.current_asset)
 
+        for index_item, name_item, type_item in completed_rows:
+            self.tree_model.appendRow([
+                QStandardItem(index_item),
+                QStandardItem(name_item),
+                QStandardItem(type_item)
+            ])
+        self.properties_action.setEnabled(True)
+        self.references_action.setEnabled(True)
+        self.set_window_state(True)
+
+    def _build_tree_model(self, asset) -> list[tuple[str, str, str]]:
         ignored_assets = set()
+        rows = []
         try:
-            for index, obj in self.current_asset.objects.items():
+            for index, obj in asset.objects.items():
                 try:
                     name = ""
                     contents = obj._read()
@@ -264,10 +278,10 @@ class WhooshWindow(QMainWindow):
                         name = contents._obj["m_Name"]
                     elif hasattr(contents, "keys") and "m_Name" in contents.keys():
                         name = contents["m_Name"]
-                    index_item = QStandardItem(str(index))
-                    name_item = QStandardItem(str(name))
-                    type_item = QStandardItem(str(obj.type))
-                    self.tree_model.appendRow([index_item, name_item, type_item])
+                    index_item = str(index)
+                    name_item = str(name)
+                    type_item = str(obj.type)
+                    rows.append([index_item, name_item, type_item])
                 except KeyError as err:
                     if "No such asset:" in err.args[0]:
                         missing_asset = re.search(r"'([^']*)'", err.args[0]).group(1)
@@ -282,13 +296,11 @@ class WhooshWindow(QMainWindow):
                                 "excluded from the list until the issue is corrected.")
                         QMessageBox.warning(self, "Missing asset", message)
                     else:
-                        QMessageBox.critical(self, "Error", f"Failed to load the specified asset file\n\n{str(err)[:500]}")
-            self.properties_action.setEnabled(True)
-            self.references_action.setEnabled(True)
+                        QMessageBox.critical(self, "Error", f"Failed to load the specified asset (during object reading)\n\n{str(err)[:500]}")
         except Exception as err:
-            QMessageBox.critical(self, "Error", f"Failed to load the specified asset file\n\n{str(err)[:500]}")
+            QMessageBox.critical(self, "Error", f"Failed to load the specified asset file (during object enumeration)\n\n{str(err)[:500]}")
         finally:
-            self.setEnabled(True)
+            return rows
 
     def set_env(self):
         self.current_env = QFileDialog.getExistingDirectory(self, "Select UnityEnvironment Directory")
@@ -375,6 +387,10 @@ class WhooshWindow(QMainWindow):
         self.save_action.setEnabled(dirty)
         self.save_as_action.setEnabled(dirty)
         self.update_window_title()
+
+    def set_window_state(self, enabled: bool):
+        self.setEnabled(enabled)
+        self.app.processEvents()
 
     def open_repo(self):
         QDesktopServices.openUrl(QUrl("https://github.com/cakeLancelot/whoosh"))
