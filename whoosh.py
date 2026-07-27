@@ -208,6 +208,10 @@ class WhooshWindow(QMainWindow):
 
         properties = {
             "Name": self.current_asset.name,
+            "Metadata Size": self.current_asset.metadata_size,
+            "File Size": self.current_asset.file_size,
+            "Data Offset": self.current_asset.data_offset,
+            "Format": self.current_asset.format,
             "Types": "\n".join(f"{type_id}: {obj}" for type_id, obj in self.current_asset.types.items()),
             "Long object IDs": self.current_asset.long_object_ids,
             "Objects Count": len(self.current_asset.objects),
@@ -224,8 +228,14 @@ class WhooshWindow(QMainWindow):
         self.display_in_right_frame(references_str)
 
     def _load_asset_file(self, filepath: str):
+        self.setEnabled(False) # Disable interaction while loading
+        self.app.processEvents() # Update the UI to reflect disabled state
+
+        # Cleanup previous state
+        self.set_asset_dirty(False)
         self.tree_view.clearSelection()
         self.clear_right_frame()
+
         self.current_file = open(filepath, 'rb')
 
         compressed_suffixes = ('.unity3d', '.resourceFile', '.assetbundle')
@@ -273,12 +283,12 @@ class WhooshWindow(QMainWindow):
                         QMessageBox.warning(self, "Missing asset", message)
                     else:
                         QMessageBox.critical(self, "Error", f"Failed to load the specified asset file\n\n{str(err)[:500]}")
+            self.properties_action.setEnabled(True)
+            self.references_action.setEnabled(True)
         except Exception as err:
             QMessageBox.critical(self, "Error", f"Failed to load the specified asset file\n\n{str(err)[:500]}")
-
-        self.set_asset_dirty(False)
-        self.properties_action.setEnabled(True)
-        self.references_action.setEnabled(True)
+        finally:
+            self.setEnabled(True)
 
     def set_env(self):
         self.current_env = QFileDialog.getExistingDirectory(self, "Select UnityEnvironment Directory")
@@ -379,6 +389,7 @@ def main():
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(resource_path('WhooshIcon.ico')))
     window = WhooshWindow()
+    window.app = app
 
     if len(sys.argv) > 1:
         filepath = sys.argv[1]
