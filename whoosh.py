@@ -1,4 +1,4 @@
-from widgets import AudioPlayerWidget, GenericObjectView, TextureViewWidget
+from widgets import AudioPlayerWidget, GenericObjectView, MoviePlayerWidget, TextureViewWidget
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QSplitter, QTreeView, QFrame,
     QFileDialog, QMessageBox, QHeaderView,
@@ -355,6 +355,8 @@ class WhooshWindow(QMainWindow):
             widget_to_add = TextureViewWidget(obj)
         elif obj.class_id == 83:
             widget_to_add = AudioPlayerWidget(obj)
+        elif obj.class_id == 152:
+            widget_to_add = MoviePlayerWidget(obj)
         else:
             widget_to_add = GenericObjectView(obj)
 
