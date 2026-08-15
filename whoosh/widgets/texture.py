@@ -7,7 +7,7 @@ from unitypack.object import ObjectInfo
 from unitypack.engine.texture import TextureFormat
 
 
-def PIL_to_qimage(pil_img):
+def PIL_to_qimage(pil_img) -> QImage:
     temp = pil_img.convert('RGBA')
     return QImage(
         temp.tobytes('raw', "RGBA"),

@@ -1,4 +1,5 @@
 import os
+import struct
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtWidgets import (
@@ -22,7 +23,19 @@ def _get_audio_format_name(value: int) -> str:
         case _: return "Undocumented - please report"
 
 
-# TODO: Test if formats other than OGG work.
+# TODO: Only 16-bit stereo seems to work currently
+def _pcm_to_wav(data: bytes, channels: int, bits_per_sample: int, sample_rate: int) -> bytes:
+    byte_rate = sample_rate * channels * bits_per_sample // 8
+    block_align = channels * bits_per_sample // 8
+    header = struct.pack(
+        "<4sI4s4sIHHIIHH4sI",
+        b"RIFF", 36 + len(data), b"WAVE",
+        b"fmt ", 16, 1, channels, sample_rate, byte_rate, block_align, bits_per_sample,
+        b"data", len(data),
+    )
+    return header + data
+
+
 class AudioPlayerWidget(QWidget):
     def __init__(self, obj: ObjectInfo, parent=None):
         self.unity_object = obj
@@ -31,7 +44,15 @@ class AudioPlayerWidget(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        temp_file = write_temp_file(self.unity_object.contents.audio_data)
+        m_format = self.unity_object.contents._obj.get('m_Format')
+        audio_data = self.unity_object.contents.audio_data
+        if m_format in (1, 2, 3, 4):
+            channels = 1 if m_format in (1, 3) else 2
+            bits_per_sample = 8 if m_format in (1, 2) else 16
+            sample_rate = self.unity_object.contents._obj.get('m_Frequency')
+            if isinstance(sample_rate, int) and sample_rate > 0:
+                audio_data = _pcm_to_wav(audio_data, channels, bits_per_sample, sample_rate)
+        temp_file = write_temp_file(audio_data)
 
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
@@ -117,11 +138,19 @@ class AudioPlayerWidget(QWidget):
         if self.unity_object.contents._obj['m_Format'] == 5:
             file_filter = "OGG Vorbis File (*.ogg)"
         else:
-            file_filter = "Raw PCM Audio (*.raw)"
+            file_filter = "Waveform Audio File (*.wav)"
         filepath, _ = QFileDialog.getSaveFileName(self, "Save Exported Object", filter=file_filter)
         if filepath is None or filepath == '':
             return False
 
         with open(filepath, 'wb') as output:
-            output.write(self.unity_object.contents.audio_data)
+            audio_data = self.unity_object.contents.audio_data
+            m_format = self.unity_object.contents._obj['m_Format']
+            if m_format in (1, 2, 3, 4):
+                channels = 1 if m_format in (1, 3) else 2
+                bits_per_sample = 8 if m_format in (1, 2) else 16
+                sample_rate = self.unity_object.contents._obj.get('m_Frequency')
+                if isinstance(sample_rate, int) and sample_rate > 0:
+                    audio_data = _pcm_to_wav(audio_data, channels, bits_per_sample, sample_rate)
+            output.write(audio_data)
         return True
