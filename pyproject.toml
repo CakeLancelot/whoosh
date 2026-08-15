@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "whoosh"
+dynamic = ["version"]
+description = "The alpha asset viewer for Unity 2.x - 3.x files"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "unitypack @ git+https://github.com/dongresource/UnityPackFF.git",
+    "PySide6",
+    "Pillow",
+    "fsb5",
+    "lz4",
+]
+
+[project.scripts]
+whoosh = "whoosh.main:main"
+
+[tool.setuptools]
+packages = ["whoosh", "whoosh.widgets"]
+
+[tool.setuptools.dynamic]
+version = {attr = "whoosh.__version__"}

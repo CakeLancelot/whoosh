@@ -1,31 +1,33 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-import site
 import os
+import unitypack
+from PyInstaller.utils.hooks import collect_all
 
-# Combine both system and user site-packages (handle multiple Python setups)
-site_packages_dirs = site.getsitepackages() + [site.getusersitepackages()]
+# Works for both normal and PEP 660 editable installs of unitypack. For an
+# editable install the real package lives outside site-packages behind a
+# meta-path finder that PyInstaller's static analysis does not follow, so the
+# package's parent directory is added to pathex to make the submodules
+# resolvable. For a normal install the parent is site-packages itself, which
+# is harmless to add.
+unitypack_parent = os.path.dirname(os.path.dirname(os.path.abspath(unitypack.__file__)))
 
-def find_file(filename):
-    for base in site_packages_dirs:
-        candidate = os.path.join(base, 'unitypack', filename)
-        if os.path.isfile(candidate):
-            return candidate
-    raise FileNotFoundError(f"{filename} not found in any site-packages directory.")
+# Modules go into the PYZ; data files (classes.json, strings.dat, structs.dat)
+# are placed alongside the package so unitypack.resources can find them via
+# os.path.dirname(__file__) at frozen runtime.
+up_datas, up_binaries, up_hiddenimports = collect_all('unitypack', include_py_files=False)
+up_datas = [d for d in up_datas if not d[0].endswith('.dist-info')]
 
 added_files = [
-    (find_file('classes.json'), 'unitypack'),
-    (find_file('strings.dat'), 'unitypack'),
-    (find_file('structs.dat'), 'unitypack'),
     ('./res/WhooshIcon.ico', '.')
 ]
 
 a = Analysis(
-    ['whoosh.py'],
-    pathex=[],
-    binaries=[],
-    datas=added_files,
-    hiddenimports=[],
+    ['whoosh/main.py'],
+    pathex=[os.path.dirname(os.path.abspath(SPEC)), unitypack_parent],
+    binaries=up_binaries,
+    datas=added_files + up_datas,
+    hiddenimports=up_hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

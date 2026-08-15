@@ -1,83 +1,21 @@
-from widgets import AudioPlayerWidget, GenericObjectView, MoviePlayerWidget, TextureViewWidget
+import os
+
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QSplitter, QTreeView, QFrame,
+    QMainWindow, QSplitter, QTreeView, QFrame,
     QFileDialog, QMessageBox, QHeaderView,
     QAbstractItemView, QVBoxLayout, QLineEdit, QTextEdit,
-    QStyleFactory, QStatusBar
+    QStyleFactory, QStatusBar, QApplication
 )
-from PySide6.QtCore import Qt, QUrl, QSortFilterProxyModel, QThread, Signal
-from PySide6.QtGui import QAction, QStandardItemModel, QStandardItem, QKeySequence, QDesktopServices, QIcon
-import os
-import re
+from PySide6.QtCore import Qt, QUrl, QSortFilterProxyModel
+from PySide6.QtGui import QAction, QStandardItemModel, QStandardItem, QKeySequence, QDesktopServices
+
 import unitypack
 from unitypack.asset import Asset
 from unitypack.environment import UnityEnvironment
 
-import signal
-import sys
-
-def extract_shader_name(script: str) -> str:
-    try:
-        return re.findall('"([^"]*)"', script)[0]
-    except IndexError:
-        return ""
-
-def resource_path(relative_path: str) -> str:
-    """Get absolute path to resource, works for dev and for PyInstaller"""
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        base_path = sys._MEIPASS
-    except AttributeError:
-        base_path = os.path.abspath("./res")
-    return os.path.join(base_path, relative_path)
-
-
-class AssetLoaderThread(QThread):
-    """Worker thread for building the tree model without blocking the UI."""
-    row_ready = Signal(str, str, str)
-    warning = Signal(str, str)
-    error = Signal(str, str)
-    finished_loading = Signal()
-
-    def __init__(self, asset):
-        super().__init__()
-        self.asset = asset
-
-    def run(self):
-        ignored_assets = set()
-        try:
-            for index, obj in self.asset.objects.items():
-                try:
-                    name = ""
-                    contents = obj._read()
-                    if hasattr(contents, "name") and contents.name not in (None, ""):
-                        name = contents.name
-                    elif obj.class_id == 48 and hasattr(contents, "script"):
-                        name = extract_shader_name(contents.script)
-                    elif hasattr(contents, "_obj") and "m_Name" in contents._obj.keys():
-                        name = contents._obj["m_Name"]
-                    elif hasattr(contents, "keys") and "m_Name" in contents.keys():
-                        name = contents["m_Name"]
-                    self.row_ready.emit(str(index), str(name), str(obj.type))
-                except KeyError as err:
-                    if "No such asset:" in err.args[0]:
-                        missing_asset = re.search(r"'([^']*)'", err.args[0]).group(1)
-                        if missing_asset in ignored_assets:
-                            continue
-                        else:
-                            ignored_assets.add(missing_asset)
-                        message = (f"This asset depends on the file \"{missing_asset}\", but it was not found.\n\n"
-                                  "You may need to copy the missing file into the same directory, "
-                                  "or set your UnityEnvironment under the \"File\" menu.\n"
-                                  "The file can still be read, but certain objects will be "
-                                  "excluded from the list until the issue is corrected.")
-                        self.warning.emit("Missing asset", message)
-                    else:
-                        self.error.emit("Error", f"Failed to load the specified asset (during object reading)\n\n{str(err)[:500]}")
-        except Exception as err:
-            self.error.emit("Error", f"Failed to load the specified asset file (during object enumeration)\n\n{str(err)[:500]}")
-        finally:
-            self.finished_loading.emit()
+from whoosh import __version__
+from whoosh.loader import AssetLoaderThread
+from whoosh.widgets import widget_for_object
 
 
 class WhooshWindow(QMainWindow):
@@ -237,7 +175,7 @@ class WhooshWindow(QMainWindow):
         if not urls:
             return
         filepath = urls[0].toLocalFile()
-        
+
         if os.path.isfile(filepath):
             self._load_asset_file(filepath)
 
@@ -351,14 +289,7 @@ class WhooshWindow(QMainWindow):
 
         obj = self.current_asset.objects[int(index_str)]
 
-        if obj.class_id == 28:
-            widget_to_add = TextureViewWidget(obj)
-        elif obj.class_id == 83:
-            widget_to_add = AudioPlayerWidget(obj)
-        elif obj.class_id == 152:
-            widget_to_add = MoviePlayerWidget(obj)
-        else:
-            widget_to_add = GenericObjectView(obj)
+        widget_to_add = widget_for_object(obj)
 
         self.right_layout.addWidget(widget_to_add)
 
@@ -369,8 +300,8 @@ class WhooshWindow(QMainWindow):
             self.export_action.setEnabled(False)
 
         if hasattr(widget_to_add, "replace_object") and callable(widget_to_add.replace_object):
-                    self.replace_function = widget_to_add.replace_object
-                    self.replace_action.setEnabled(True)
+            self.replace_function = widget_to_add.replace_object
+            self.replace_action.setEnabled(True)
         else:
             self.replace_action.setEnabled(False)
 
@@ -427,27 +358,6 @@ class WhooshWindow(QMainWindow):
         QDesktopServices.openUrl(QUrl("https://github.com/cakeLancelot/whoosh"))
 
     def about(self):
-        QMessageBox.about(self, "About whoosh", "whoosh v0.1\n\n"
-                                                "The alpha asset viewer for Unity 2.x - 3.x files.\n"
-                                                "Built with PySide6 and UnityPackFF.\n\n")
-
-def main():
-    signal.signal(signal.SIGINT, signal.SIG_DFL)
-    app = QApplication(sys.argv)
-    app.setWindowIcon(QIcon(resource_path('WhooshIcon.ico')))
-    window = WhooshWindow()
-    window.app = app
-
-    if len(sys.argv) > 1:
-        filepath = sys.argv[1]
-        if os.path.isfile(filepath):
-            window._load_asset_file(filepath)
-        else:
-            QMessageBox.critical(window, "Error", f"File not found: {filepath}")
-
-    window.show()
-    sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-    main()
+        QMessageBox.about(self, "About whoosh", f"whoosh v{__version__}\n\n"
+                                                 "The alpha asset viewer for Unity 2.x - 3.x files.\n"
+                                                 "Built with PySide6 and UnityPackFF.\n\n")
